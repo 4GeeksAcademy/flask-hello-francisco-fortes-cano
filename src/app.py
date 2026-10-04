@@ -2,6 +2,8 @@
 This module takes care of starting the API Server, Loading the DB and Adding the endpoints
 """
 import os
+from datetime import timedelta
+from flask_jwt_extended import JWTManager
 from flask import Flask, request, jsonify, url_for, send_from_directory
 from flask_migrate import Migrate
 from flask_swagger import swagger
@@ -18,6 +20,23 @@ static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../dist/')
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY')
+if not app.config['JWT_SECRET_KEY']:
+    raise RuntimeError('Ejecuta primero: pipenv run python scripts/setup_auth.py')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+jwt = JWTManager(app)
+
+@jwt.unauthorized_loader
+def missing_token(reason):
+    return jsonify(message='Inicia sesión para continuar.'), 401
+
+@jwt.invalid_token_loader
+def invalid_token(reason):
+    return jsonify(message='Sesión no válida. Vuelve a entrar.'), 401
+
+@jwt.expired_token_loader
+def expired_token(header, payload):
+    return jsonify(message='Tu sesión ha caducado. Vuelve a entrar.'), 401
 
 # database condiguration
 db_url = os.getenv("DATABASE_URL")
@@ -32,7 +51,7 @@ MIGRATE = Migrate(app, db, compare_type=True)
 db.init_app(app)
 
 # add the admin
-setup_admin(app)
+# El ejercicio usa únicamente las rutas autenticadas de la API.
 
 # add the admin
 setup_commands(app)
